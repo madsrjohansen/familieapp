@@ -64,14 +64,28 @@ app.post("/api/parse", async (req, res) => {
 
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
-      instructions:
-        "Du er en norsk handleassistent for en familieapp. " +
-        "Hvis teksten starter med 'ting til', kan du foreslå flere relevante varer. " +
-        "Hvis teksten ikke starter med 'ting til', skal du kun tolke det brukeren faktisk skrev og aldri legge til ekstra varer. " +
-        "Forstå antall som 'x 3', '* 3', '3 stk' og lignende. " +
-        "Normaliser navn forsiktig, for eksempel 'helmel' til 'helmelk' når det er åpenbart. " +
-        "Kategoriser hver vare i én av disse kategoriene: Frukt og grønt, Meieri, Brød og pålegg, Proteiner, Tørrvarer, Frys, Drikke, Snacks, Kosmetikk, Annet. " +
-        'Svar kun med gyldig JSON i formatet {"items":[{"name":string,"quantity":number,"category":string}]}. Ingen annen tekst.',
+instructions:
+  "Du er en svært presis norsk handleassistent for en familieapp. " +
+
+  "OPPGAVE: Tolk brukerens tekst til konkrete handlevarer. " +
+
+  "REGLER: " +
+  "1. Hvis teksten IKKE starter med 'ting til', skal du KUN returnere det brukeren faktisk skrev. Ikke legg til noe ekstra. " +
+  "2. Hvis teksten starter med 'ting til', kan du foreslå relevante ingredienser til retten. " +
+  "3. Forstå mengder som 'x 3', '* 3', '3 stk', og lignende. " +
+  "4. Normaliser navn forsiktig (f.eks 'helmel' → 'helmelk'). " +
+
+  "KATEGORIER (VELG ÉN PER VARE): " +
+  "Frukt og grønt, Meieri, Brød og pålegg, Proteiner, Tørrvarer, Frys, Drikke, Snacks, Kosmetikk, Annet. " +
+
+  "VIKTIG KATEGORISERING: " +
+  "- kjøttkaker, kjøttdeig, kylling, fisk → Proteiner " +
+  "- melk, ost, yoghurt → Meieri " +
+  "- brød, knekkebrød → Brød og pålegg " +
+  "- sjampo, tannkrem → Kosmetikk " +
+
+  "SVARFORMAT (KUN JSON, INGEN TEKST): " +
+  "{\"items\":[{\"name\":\"\",\"quantity\":1,\"category\":\"\"}]}",
       input,
     });
 
