@@ -334,6 +334,47 @@ app.post("/api/purchase", async (req, res) => {
   }
 });
 
+app.post("/api/shopping-sessions", async (req, res) => {
+  try {
+    const shopperName = String(req.body?.shopperName || "").trim();
+    const totalAmount = Number(req.body?.totalAmount);
+    const purchasedAt = String(req.body?.purchasedAt || "").trim();
+
+    if (!shopperName) {
+      return res.status(400).json({ error: "Mangler shopperName." });
+    }
+
+    if (!Number.isFinite(totalAmount) || totalAmount < 0) {
+      return res.status(400).json({ error: "Ugyldig totalAmount." });
+    }
+
+    const rowToInsert = {
+      shopper_name: shopperName,
+      total_amount: totalAmount,
+      purchased_at: purchasedAt || new Date().toISOString().slice(0, 10),
+    };
+
+    const { data, error } = await supabase
+      .from("shopping_sessions")
+      .insert(rowToInsert)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return res.json({
+      session: data,
+    });
+  } catch (error) {
+    console.error("Feil i /api/shopping-sessions", error);
+
+    return res.status(500).json({
+      error: "Kunne ikke lagre handleturen.",
+      details: error?.message || "Ukjent feil",
+    });
+  }
+});
+
 app.delete("/api/history", async (_req, res) => {
   try {
     const { error } = await supabase
