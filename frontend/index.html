@@ -130,6 +130,27 @@
       flex: 1;
     }
 
+    .inline-suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .suggestion-chip {
+      background: #eef2ff;
+      color: #1e293b;
+      border: 1px solid #c7d2fe;
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .suggestion-chip:hover {
+      background: #e0e7ff;
+    }
+
     .category {
       margin-top: 18px;
     }
@@ -194,8 +215,7 @@
       font-size: 14px;
     }
 
-    .history-header,
-    .suggestions-header {
+    .history-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -238,33 +258,6 @@
       line-height: 1.5;
     }
 
-    .suggestions-wrap {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-
-    .suggestion-chip {
-      background: #eef2ff;
-      color: #1e293b;
-      border: 1px solid #c7d2fe;
-      border-radius: 999px;
-      padding: 10px 14px;
-      cursor: pointer;
-      font-size: 14px;
-    }
-
-    .suggestion-chip:hover {
-      background: #e0e7ff;
-    }
-
-    .suggestion-meta {
-      margin-top: 12px;
-      color: #64748b;
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
     @media (max-width: 640px) {
       .row,
       .member-row {
@@ -279,7 +272,6 @@
 
       .footer,
       .history-header,
-      .suggestions-header,
       .history-item {
         flex-direction: column;
         align-items: stretch;
@@ -311,17 +303,9 @@
         <button id="addBtn">+</button>
       </div>
 
-      <div class="message" id="message">Klar for handling.</div>
-    </div>
-
-    <div class="card">
-      <div class="suggestions-header">
-        <div>
-          <h2>Smarte forslag</h2>
-          <div class="sub" style="margin-bottom:0;">Basert på varer familien ofte har kjøpt.</div>
-        </div>
-      </div>
       <div id="suggestionsCard"></div>
+
+      <div class="message" id="message">Klar for handling.</div>
     </div>
 
     <div class="card" id="listCard"></div>
@@ -515,24 +499,17 @@
       const suggestions = getSuggestionCandidates();
 
       if (suggestions.length === 0) {
-        suggestionsCard.innerHTML = `
-          <div class="empty">
-            Kjøp noen varer først, så begynner appen å foreslå ting familien ofte handler.
-          </div>
-        `;
+        suggestionsCard.innerHTML = "";
         return;
       }
 
       suggestionsCard.innerHTML = `
-        <div class="suggestions-wrap">
+        <div class="inline-suggestions">
           ${suggestions.map(item => `
             <button class="suggestion-chip" onclick="addSuggestion('${item.normalizedName.replace(/'/g, "\\'")}')">
               ${item.name}
             </button>
           `).join("")}
-        </div>
-        <div class="suggestion-meta">
-          Forslagene bygger på familiens kjøpshistorikk og skjuler varer som allerede ligger i aktiv liste.
         </div>
       `;
     }
@@ -737,7 +714,7 @@
       });
 
       saveData();
-      setMessage(`${match.name} ble lagt til av ${activeUser} fra forslag.`);
+      setMessage(`${match.name} ble lagt til av ${activeUser}.`);
       render();
     }
 
@@ -779,28 +756,11 @@
         return;
       }
 
-      const previousUsers = [...users];
       users = newUsers;
 
       if (!users.includes(activeUser)) {
         activeUser = users[0];
       }
-
-      items = items.map(item => {
-        const safeAddedBy = previousUsers.includes(item.addedBy) ? item.addedBy : users[0];
-        return {
-          ...item,
-          addedBy: safeAddedBy
-        };
-      });
-
-      history = history.map(item => {
-        const safePurchasedBy = previousUsers.includes(item.purchasedBy) ? item.purchasedBy : users[0];
-        return {
-          ...item,
-          purchasedBy: safePurchasedBy
-        };
-      });
 
       saveData();
       setMessage("Familiemedlemmer er oppdatert.");
