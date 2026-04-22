@@ -331,15 +331,7 @@
   </div>
 
   <script>
-    const API_URL = "https://familieapp-backend.onrender.com/api/parse";
-    const STORAGE_KEY_ITEMS = "familieapp_items";
-    const STORAGE_KEY_HISTORY = "familieapp_history";
-    const STORAGE_KEY_SUGGESTION_MEMORY = "familieapp_suggestion_memory";
-    const STORAGE_KEY_ACTIVE_USER = "familieapp_active_user";
-    const STORAGE_KEY_USERS = "familieapp_users";
-    const STORAGE_KEY_HISTORY_OPEN = "familieapp_history_open";
-
-    const DEFAULT_USERS = ["Mamma", "Pappa", "Barn 1", "Barn 2"];
+    const API_BASE = "https://familieapp-backend.onrender.com";
 
     const CATEGORY_ORDER = [
       "Frukt og grønt",
@@ -356,9 +348,8 @@
 
     let items = [];
     let history = [];
-    let suggestionMemory = [];
-    let users = [...DEFAULT_USERS];
-    let activeUser = users[0];
+    let users = [];
+    let activeUser = "";
     let historyOpen = false;
 
     const input = document.getElementById("input");
@@ -382,65 +373,12 @@
     }
 
     function normalizeName(value) {
-      return value.trim().toLowerCase().replace(/\s+/g, " ");
-    }
-
-    function displayName(value) {
-      return value.charAt(0).toUpperCase() + value.slice(1);
+      return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
     }
 
     function formatDate(value) {
       const date = new Date(value);
       return date.toLocaleString("no-NO");
-    }
-
-    function saveData() {
-      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
-      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
-      localStorage.setItem(STORAGE_KEY_SUGGESTION_MEMORY, JSON.stringify(suggestionMemory));
-      localStorage.setItem(STORAGE_KEY_ACTIVE_USER, activeUser);
-      localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
-      localStorage.setItem(STORAGE_KEY_HISTORY_OPEN, JSON.stringify(historyOpen));
-    }
-
-    function loadData() {
-      try {
-        const savedItems = localStorage.getItem(STORAGE_KEY_ITEMS);
-        const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
-        const savedSuggestionMemory = localStorage.getItem(STORAGE_KEY_SUGGESTION_MEMORY);
-        const savedActiveUser = localStorage.getItem(STORAGE_KEY_ACTIVE_USER);
-        const savedUsers = localStorage.getItem(STORAGE_KEY_USERS);
-        const savedHistoryOpen = localStorage.getItem(STORAGE_KEY_HISTORY_OPEN);
-
-        items = savedItems ? JSON.parse(savedItems) : [];
-        history = savedHistory ? JSON.parse(savedHistory) : [];
-        suggestionMemory = savedSuggestionMemory ? JSON.parse(savedSuggestionMemory) : [];
-
-        const parsedUsers = savedUsers ? JSON.parse(savedUsers) : DEFAULT_USERS;
-        users = Array.isArray(parsedUsers)
-          ? parsedUsers.map(name => String(name).trim()).filter(Boolean).slice(0, 6)
-          : [...DEFAULT_USERS];
-
-        if (users.length === 0) {
-          users = [...DEFAULT_USERS];
-        }
-
-        if (savedActiveUser && users.includes(savedActiveUser)) {
-          activeUser = savedActiveUser;
-        } else {
-          activeUser = users[0];
-        }
-
-        historyOpen = savedHistoryOpen ? JSON.parse(savedHistoryOpen) === true : false;
-      } catch (error) {
-        console.error("Kunne ikke lese lagrede data", error);
-        items = [];
-        history = [];
-        suggestionMemory = [];
-        users = [...DEFAULT_USERS];
-        activeUser = users[0];
-        historyOpen = false;
-      }
     }
 
     function renderUsers() {
@@ -457,45 +395,32 @@
       `).join("");
     }
 
-    function rememberPurchase(item) {
-      suggestionMemory.unshift({
-        normalizedName: item.normalizedName,
-        name: item.name,
-        category: item.category || "Annet",
-        quantity: Number(item.quantity) > 0 ? Number(item.quantity) : 1,
-        purchasedAt: new Date().toISOString(),
-        purchasedBy: activeUser
-      });
-
-      if (suggestionMemory.length > 500) {
-        suggestionMemory = suggestionMemory.slice(0, 500);
-      }
-    }
-
     function getSuggestionCandidates() {
       const counts = {};
 
-      suggestionMemory.forEach(item => {
-        if (!item.normalizedName) return;
+      history.forEach(item => {
+        const normalized = normalizeName(item.normalized_name || item.normalizedName || item.name);
+        if (!normalized) return;
 
-        if (!counts[item.normalizedName]) {
-          counts[item.normalizedName] = {
-            normalizedName: item.normalizedName,
+        if (!counts[normalized]) {
+          counts[normalized] = {
+            normalizedName: normalized,
             name: item.name,
             category: item.category || "Annet",
             timesPurchased: 0,
-            lastPurchasedAt: item.purchasedAt || null
+            lastPurchasedAt: item.purchased_at || item.purchasedAt || null
           };
         }
 
-        counts[item.normalizedName].timesPurchased += 1;
+        counts[normalized].timesPurchased += 1;
 
+        const purchasedAt = item.purchased_at || item.purchasedAt;
         if (
-          item.purchasedAt &&
-          (!counts[item.normalizedName].lastPurchasedAt ||
-            new Date(item.purchasedAt) > new Date(counts[item.normalizedName].lastPurchasedAt))
+          purchasedAt &&
+          (!counts[normalized].lastPurchasedAt ||
+            new Date(purchasedAt) > new Date(counts[normalized].lastPurchasedAt))
         ) {
-          counts[item.normalizedName].lastPurchasedAt = item.purchasedAt;
+          counts[normalized].lastPurchasedAt = purchasedAt;
         }
       });
 
@@ -558,11 +483,11 @@
                 <div class="history-item-name">${item.name}</div>
                 <div class="history-item-meta">
                   Kategori: ${item.category || "Annet"}<br>
-                  Handlet av: ${item.purchasedBy || "Ukjent"}<br>
-                  Kjøpt: ${formatDate(item.purchasedAt)}
+                  Handlet av: ${item.purchased_by || item.purchasedBy || "Ukjent"}<br>
+                  Kjøpt: ${formatDate(item.purchased_at || item.purchasedAt)}
                 </div>
               </div>
-              ${item.quantity > 1 ? `<span class="qty">${item.quantity}</span>` : ""}
+              ${Number(item.quantity) > 1 ? `<span class="qty">${item.quantity}</span>` : ""}
             </div>
           `).join("")}
         </div>
@@ -570,10 +495,9 @@
     }
 
     function renderActiveItems() {
-      const activeItems = items.filter(item => item.status === "active");
-      activeCount.textContent = `Aktive varer: ${activeItems.length}`;
+      activeCount.textContent = `Aktive varer: ${items.length}`;
 
-      if (activeItems.length === 0) {
+      if (items.length === 0) {
         listCard.innerHTML = `
           <div class="empty">
             <div style="font-size:32px;">🛒</div>
@@ -587,9 +511,10 @@
       const grouped = {};
       CATEGORY_ORDER.forEach(category => grouped[category] = []);
 
-      activeItems.forEach(item => {
-        if (!grouped[item.category]) grouped[item.category] = [];
-        grouped[item.category].push(item);
+      items.forEach(item => {
+        const category = item.category || "Annet";
+        if (!grouped[category]) grouped[category] = [];
+        grouped[category].push(item);
       });
 
       let html = "";
@@ -603,7 +528,7 @@
                   <span class="item-name">${item.name}</span>
                   <span class="item-meta">Trykk for å markere som kjøpt av ${activeUser}</span>
                 </div>
-                ${item.quantity > 1 ? `<span class="qty">${item.quantity}</span>` : ""}
+                ${Number(item.quantity) > 1 ? `<span class="qty">${item.quantity}</span>` : ""}
               </div>
             `;
           });
@@ -622,34 +547,62 @@
       renderHistory();
     }
 
-    function addItemDirect({ name, normalizedName, category, quantity, addedBy }) {
-      const safeNormalized = normalizeName(normalizedName || name || "");
-      if (!safeNormalized) return false;
+    async function loadBootstrap() {
+      const response = await fetch(`${API_BASE}/api/bootstrap`);
+      const data = await response.json();
 
-      const safeName = displayName(safeNormalized);
-      const safeCategory = category || "Annet";
-      const safeQuantity = Number(quantity) > 0 ? Number(quantity) : 1;
-
-      const existing = items.find(
-        entry => entry.normalizedName === safeNormalized && entry.status === "active"
-      );
-
-      if (existing) {
-        existing.quantity += safeQuantity;
-      } else {
-        items.push({
-          id: Date.now() + Math.random(),
-          name: safeName,
-          normalizedName: safeNormalized,
-          category: safeCategory,
-          quantity: safeQuantity,
-          status: "active",
-          createdAt: new Date().toISOString(),
-          addedBy: addedBy || activeUser
-        });
+      if (!response.ok) {
+        throw new Error(data?.error || "Kunne ikke hente startdata");
       }
 
-      return true;
+      users = Array.isArray(data.users) && data.users.length > 0
+        ? data.users
+        : ["Mamma", "Pappa", "Barn 1", "Barn 2"];
+
+      if (!activeUser || !users.includes(activeUser)) {
+        activeUser = users[0];
+      }
+
+      items = Array.isArray(data.items) ? data.items : [];
+      history = Array.isArray(data.history) ? data.history : [];
+    }
+
+    async function addItemDirect({ name, category, quantity, addedBy }) {
+      const response = await fetch(`${API_BASE}/api/items`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name,
+          category,
+          quantity,
+          addedBy
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Kunne ikke lagre varen");
+      }
+
+      const updatedItem = data.item;
+      const index = items.findIndex(item => item.id === updatedItem.id);
+
+      if (index >= 0) {
+        items[index] = updatedItem;
+      } else {
+        const existingByName = items.findIndex(
+          item => normalizeName(item.normalized_name || item.name) === normalizeName(updatedItem.normalized_name || updatedItem.name)
+        );
+
+        if (existingByName >= 0) {
+          items[existingByName] = updatedItem;
+        } else {
+          items.push(updatedItem);
+        }
+      }
     }
 
     async function addItems() {
@@ -663,31 +616,31 @@
       setMessage(`Tolker teksten for ${activeUser}...`);
 
       try {
-        const response = await fetch(API_URL, {
+        const response = await fetch(`${API_BASE}/api/parse`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json"
+          },
           body: JSON.stringify({ input: value })
         });
 
         const data = await response.json();
 
-        if (!data.items || !Array.isArray(data.items)) {
-          throw new Error("Ugyldig svar fra API");
+        if (!response.ok || !Array.isArray(data.items)) {
+          throw new Error(data?.error || "Ugyldig svar fra API");
         }
 
-        data.items.forEach((item) => {
-          addItemDirect({
+        for (const item of data.items) {
+          await addItemDirect({
             name: item.name || "",
-            normalizedName: item.name || "",
             category: item.category || "Annet",
             quantity: item.quantity,
             addedBy: activeUser
           });
-        });
+        }
 
-        saveData();
-        setMessage(`${activeUser} la til ${data.items.length} vare${data.items.length > 1 ? "r" : ""}.`);
         input.value = "";
+        setMessage(`${activeUser} la til ${data.items.length} vare${data.items.length > 1 ? "r" : ""}.`);
         render();
       } catch (error) {
         console.error(error);
@@ -697,52 +650,81 @@
       }
     }
 
-    function markPurchased(id) {
-      const item = items.find(entry => entry.id === id);
-      if (!item) return;
+    async function markPurchased(id) {
+      try {
+        const response = await fetch(`${API_BASE}/api/purchase`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            itemId: id,
+            purchasedBy: activeUser
+          })
+        });
 
-      items = items.filter(entry => entry.id !== id);
+        const data = await response.json();
 
-      const purchasedItem = {
-        ...item,
-        status: "purchased",
-        purchasedAt: new Date().toISOString(),
-        purchasedBy: activeUser
-      };
+        if (!response.ok) {
+          throw new Error(data?.error || "Kunne ikke markere varen som kjøpt");
+        }
 
-      history.unshift(purchasedItem);
-      rememberPurchase(purchasedItem);
+        items = items.filter(item => item.id !== data.removedItemId);
 
-      saveData();
-      setMessage(`${item.name} er kjøpt av ${activeUser}.`);
-      render();
+        if (data.purchased) {
+          history.unshift(data.purchased);
+        }
+
+        setMessage(`${data?.purchased?.name || "Varen"} er kjøpt av ${activeUser}.`);
+        render();
+      } catch (error) {
+        console.error(error);
+        setMessage("Kunne ikke markere varen som kjøpt.");
+      }
     }
 
-    function addSuggestion(normalizedName) {
-      const match = suggestionMemory.find(item => item.normalizedName === normalizedName);
+    async function addSuggestion(normalizedName) {
+      const match = history.find(item => normalizeName(item.normalized_name || item.name) === normalizedName);
       if (!match) return;
 
-      addItemDirect({
-        name: match.name,
-        normalizedName: match.normalizedName,
-        category: match.category,
-        quantity: 1,
-        addedBy: activeUser
-      });
+      try {
+        await addItemDirect({
+          name: match.name,
+          category: match.category,
+          quantity: 1,
+          addedBy: activeUser
+        });
 
-      saveData();
-      setMessage(`${match.name} ble lagt til av ${activeUser}.`);
-      render();
+        setMessage(`${match.name} ble lagt til av ${activeUser}.`);
+        render();
+      } catch (error) {
+        console.error(error);
+        setMessage("Kunne ikke legge til forslag.");
+      }
     }
 
-    function clearHistory() {
+    async function clearHistory() {
       const confirmed = window.confirm("Er du sikker på at du vil tømme historikken?");
       if (!confirmed) return;
 
-      history = [];
-      saveData();
-      setMessage("Historikken ble tømt. Forslagene er fortsatt bevart.");
-      render();
+      try {
+        const response = await fetch(`${API_BASE}/api/history`, {
+          method: "DELETE"
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || "Kunne ikke tømme historikken");
+        }
+
+        history = [];
+        setMessage("Historikken ble tømt.");
+        render();
+      } catch (error) {
+        console.error(error);
+        setMessage("Kunne ikke tømme historikken.");
+      }
     }
 
     function changeActiveUser() {
@@ -750,7 +732,6 @@
       if (!users.includes(selected)) return;
 
       activeUser = selected;
-      saveData();
       setMessage(`${activeUser} er valgt som aktiv bruker.`);
       render();
     }
@@ -761,7 +742,7 @@
       toggleSettingsBtn.textContent = isOpen ? "Rediger familiemedlemmer" : "Lukk redigering";
     }
 
-    function saveMembers() {
+    async function saveMembers() {
       const inputs = Array.from(memberList.querySelectorAll("input"));
       const newUsers = inputs
         .map(input => input.value.trim())
@@ -773,20 +754,37 @@
         return;
       }
 
-      users = newUsers;
+      try {
+        const response = await fetch(`${API_BASE}/api/family-members`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ users: newUsers })
+        });
 
-      if (!users.includes(activeUser)) {
-        activeUser = users[0];
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || "Kunne ikke lagre familiemedlemmer");
+        }
+
+        users = Array.isArray(data.users) ? data.users : newUsers;
+
+        if (!users.includes(activeUser)) {
+          activeUser = users[0];
+        }
+
+        setMessage("Familiemedlemmer er oppdatert.");
+        render();
+      } catch (error) {
+        console.error(error);
+        setMessage("Kunne ikke lagre familiemedlemmer.");
       }
-
-      saveData();
-      setMessage("Familiemedlemmer er oppdatert.");
-      render();
     }
 
     function toggleHistory() {
       historyOpen = !historyOpen;
-      saveData();
       render();
     }
 
@@ -801,11 +799,20 @@
       if (e.key === "Enter") addItems();
     });
 
-    loadData();
-    render();
-
     window.markPurchased = markPurchased;
     window.addSuggestion = addSuggestion;
+
+    (async function init() {
+      try {
+        setMessage("Laster data...");
+        await loadBootstrap();
+        setMessage("Klar for handling.");
+        render();
+      } catch (error) {
+        console.error(error);
+        setMessage("Kunne ikke laste data fra databasen.");
+      }
+    })();
   </script>
 </body>
 </html>
