@@ -388,9 +388,9 @@
     }
 
     function renderMemberInputs() {
-      memberList.innerHTML = users.map((user, index) => `
+      memberList.innerHTML = users.map((user) => `
         <div class="member-row">
-          <input type="text" data-index="${index}" value="${user}" placeholder="Navn" />
+          <input type="text" value="${user}" placeholder="Navn" />
         </div>
       `).join("");
     }
@@ -399,7 +399,7 @@
       const counts = {};
 
       history.forEach(item => {
-        const normalized = normalizeName(item.normalized_name || item.normalizedName || item.name);
+        const normalized = normalizeName(item.normalized_name || item.name);
         if (!normalized) return;
 
         if (!counts[normalized]) {
@@ -408,19 +408,18 @@
             name: item.name,
             category: item.category || "Annet",
             timesPurchased: 0,
-            lastPurchasedAt: item.purchased_at || item.purchasedAt || null
+            lastPurchasedAt: item.purchased_at || null
           };
         }
 
         counts[normalized].timesPurchased += 1;
 
-        const purchasedAt = item.purchased_at || item.purchasedAt;
         if (
-          purchasedAt &&
+          item.purchased_at &&
           (!counts[normalized].lastPurchasedAt ||
-            new Date(purchasedAt) > new Date(counts[normalized].lastPurchasedAt))
+            new Date(item.purchased_at) > new Date(counts[normalized].lastPurchasedAt))
         ) {
-          counts[normalized].lastPurchasedAt = purchasedAt;
+          counts[normalized].lastPurchasedAt = item.purchased_at;
         }
       });
 
@@ -483,8 +482,8 @@
                 <div class="history-item-name">${item.name}</div>
                 <div class="history-item-meta">
                   Kategori: ${item.category || "Annet"}<br>
-                  Handlet av: ${item.purchased_by || item.purchasedBy || "Ukjent"}<br>
-                  Kjøpt: ${formatDate(item.purchased_at || item.purchasedAt)}
+                  Handlet av: ${item.purchased_by || "Ukjent"}<br>
+                  Kjøpt: ${formatDate(item.purchased_at)}
                 </div>
               </div>
               ${Number(item.quantity) > 1 ? `<span class="qty">${item.quantity}</span>` : ""}
@@ -588,20 +587,21 @@
       }
 
       const updatedItem = data.item;
-      const index = items.findIndex(item => item.id === updatedItem.id);
+      const existingById = items.findIndex(item => item.id === updatedItem.id);
 
-      if (index >= 0) {
-        items[index] = updatedItem;
+      if (existingById >= 0) {
+        items[existingById] = updatedItem;
+        return;
+      }
+
+      const existingByName = items.findIndex(
+        item => normalizeName(item.normalized_name || item.name) === normalizeName(updatedItem.normalized_name || updatedItem.name)
+      );
+
+      if (existingByName >= 0) {
+        items[existingByName] = updatedItem;
       } else {
-        const existingByName = items.findIndex(
-          item => normalizeName(item.normalized_name || item.name) === normalizeName(updatedItem.normalized_name || updatedItem.name)
-        );
-
-        if (existingByName >= 0) {
-          items[existingByName] = updatedItem;
-        } else {
-          items.push(updatedItem);
-        }
+        items.push(updatedItem);
       }
     }
 
