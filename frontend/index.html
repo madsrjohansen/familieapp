@@ -26,7 +26,7 @@
       margin-bottom: 16px;
     }
 
-    h1 {
+    h1, h2 {
       margin: 0 0 8px;
     }
 
@@ -97,27 +97,28 @@
       background: #f8fafc;
     }
 
+    .item-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .item-name {
+      font-weight: 600;
+    }
+
+    .item-meta {
+      font-size: 13px;
+      color: #64748b;
+    }
+
     .qty {
       background: #f8fafc;
       border: 1px solid #cbd5e1;
       padding: 4px 10px;
       border-radius: 999px;
       font-size: 14px;
-    }
-
-    .badge-row {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 14px;
-    }
-
-    .badge {
-      background: #e2e8f0;
-      color: #334155;
-      padding: 8px 12px;
-      border-radius: 999px;
-      font-size: 14px;
+      white-space: nowrap;
     }
 
     .empty {
@@ -132,13 +133,74 @@
       color: #64748b;
       font-size: 14px;
     }
+
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .secondary-btn {
+      background: #e2e8f0;
+      color: #1e293b;
+      font-size: 14px;
+      padding: 10px 14px;
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 12px 14px;
+      background: #fff;
+    }
+
+    .history-item-name {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .history-item-meta {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 640px) {
+      .row {
+        flex-direction: column;
+      }
+
+      button,
+      input {
+        width: 100%;
+      }
+
+      .footer,
+      .history-header,
+      .history-item {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
       <h1>Mat</h1>
-      <div class="sub">Koblet til ekte AI-backend</div>
+      <div class="sub">Familiens handleliste</div>
 
       <div class="row">
         <input id="input" placeholder="Legg til matvarer..." />
@@ -146,20 +208,31 @@
       </div>
 
       <div class="message" id="message">Klar for handling.</div>
-
-      
     </div>
 
     <div class="card" id="listCard"></div>
 
+    <div class="card">
+      <div class="history-header">
+        <div>
+          <h2>Handlehistorikk</h2>
+          <div class="sub" style="margin-bottom:0;">Kjøpte varer lagres her.</div>
+        </div>
+        <button id="clearHistoryBtn" class="secondary-btn">Tøm historikk</button>
+      </div>
+      <div id="historyCard"></div>
+    </div>
+
     <div class="card footer">
       <span id="activeCount">Aktive varer: 0</span>
-      <span id="historyCount">Kjøpt: 0</span>
+      <span id="historyCount">Kjøpt totalt: 0</span>
     </div>
   </div>
 
   <script>
     const API_URL = "https://familieapp-backend.onrender.com/api/parse";
+    const STORAGE_KEY_ITEMS = "familieapp_items";
+    const STORAGE_KEY_HISTORY = "familieapp_history";
 
     const CATEGORY_ORDER = [
       "Frukt og grønt",
@@ -174,20 +247,17 @@
       "Annet"
     ];
 
-    let items = [
-      { id: 1, name: "Melk", normalizedName: "melk", category: "Meieri", quantity: 2, status: "active" },
-      { id: 2, name: "Bananer", normalizedName: "bananer", category: "Frukt og grønt", quantity: 1, status: "active" },
-      { id: 3, name: "Brød", normalizedName: "brød", category: "Brød og pålegg", quantity: 1, status: "active" }
-    ];
-
+    let items = [];
     let history = [];
 
     const input = document.getElementById("input");
     const addBtn = document.getElementById("addBtn");
     const message = document.getElementById("message");
     const listCard = document.getElementById("listCard");
+    const historyCard = document.getElementById("historyCard");
     const activeCount = document.getElementById("activeCount");
     const historyCount = document.getElementById("historyCount");
+    const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 
     function setMessage(text) {
       message.textContent = text;
@@ -201,16 +271,69 @@
       return value.charAt(0).toUpperCase() + value.slice(1);
     }
 
-    function render() {
+    function formatDate(value) {
+      const date = new Date(value);
+      return date.toLocaleString("no-NO");
+    }
+
+    function saveData() {
+      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
+      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
+    }
+
+    function loadData() {
+      try {
+        const savedItems = localStorage.getItem(STORAGE_KEY_ITEMS);
+        const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
+
+        items = savedItems ? JSON.parse(savedItems) : [];
+        history = savedHistory ? JSON.parse(savedHistory) : [];
+      } catch (error) {
+        console.error("Kunne ikke lese lagrede data", error);
+        items = [];
+        history = [];
+      }
+    }
+
+    function renderHistory() {
+      historyCount.textContent = `Kjøpt totalt: ${history.length}`;
+
+      if (history.length === 0) {
+        historyCard.innerHTML = `
+          <div class="empty">
+            Ingen kjøpte varer ennå.
+          </div>
+        `;
+        return;
+      }
+
+      historyCard.innerHTML = `
+        <div class="history-list">
+          ${history.map(item => `
+            <div class="history-item">
+              <div>
+                <div class="history-item-name">${item.name}</div>
+                <div class="history-item-meta">
+                  Kategori: ${item.category || "Annet"}<br>
+                  Kjøpt: ${formatDate(item.purchasedAt)}
+                </div>
+              </div>
+              ${item.quantity > 1 ? `<span class="qty">${item.quantity}</span>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderActiveItems() {
       const activeItems = items.filter(item => item.status === "active");
       activeCount.textContent = `Aktive varer: ${activeItems.length}`;
-      historyCount.textContent = `Kjøpt: ${history.length}`;
 
       if (activeItems.length === 0) {
         listCard.innerHTML = `
           <div class="empty">
-            <div style="font-size:32px;">🎉</div>
-            <div style="margin-top:8px;font-weight:bold;">Ferdig handlet</div>
+            <div style="font-size:32px;">🛒</div>
+            <div style="margin-top:8px;font-weight:bold;">Ingen aktive varer</div>
             <div style="margin-top:4px;">Legg til nye varer over.</div>
           </div>
         `;
@@ -232,7 +355,10 @@
           grouped[category].forEach(item => {
             html += `
               <div class="item" onclick="markPurchased(${item.id})">
-                <span>${item.name}</span>
+                <div class="item-left">
+                  <span class="item-name">${item.name}</span>
+                  <span class="item-meta">Trykk for å markere som kjøpt</span>
+                </div>
                 ${item.quantity > 1 ? `<span class="qty">${item.quantity}</span>` : ""}
               </div>
             `;
@@ -242,6 +368,11 @@
       });
 
       listCard.innerHTML = html;
+    }
+
+    function render() {
+      renderActiveItems();
+      renderHistory();
     }
 
     async function addItems() {
@@ -268,7 +399,9 @@
         }
 
         data.items.forEach((item) => {
-          const normalized = normalizeName(item.name);
+          const normalized = normalizeName(item.name || "");
+          if (!normalized) return;
+
           const quantity = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
           const category = item.category || "Annet";
 
@@ -285,11 +418,13 @@
               normalizedName: normalized,
               category,
               quantity,
-              status: "active"
+              status: "active",
+              createdAt: new Date().toISOString()
             });
           }
         });
 
+        saveData();
         setMessage(`La til ${data.items.length} vare${data.items.length > 1 ? "r" : ""}.`);
         input.value = "";
         render();
@@ -309,16 +444,35 @@
         entry.id === id ? { ...entry, status: "purchased" } : entry
       );
 
-      history.unshift({ ...item, purchasedAt: new Date().toISOString() });
+      history.unshift({
+        ...item,
+        status: "purchased",
+        purchasedAt: new Date().toISOString()
+      });
+
+      saveData();
       setMessage(`${item.name} er kjøpt.`);
       render();
     }
 
+    function clearHistory() {
+      const confirmed = window.confirm("Er du sikker på at du vil tømme historikken?");
+      if (!confirmed) return;
+
+      history = [];
+      saveData();
+      setMessage("Historikken ble tømt.");
+      render();
+    }
+
     addBtn.addEventListener("click", addItems);
+    clearHistoryBtn.addEventListener("click", clearHistory);
+
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") addItems();
     });
 
+    loadData();
     render();
   </script>
 </body>
