@@ -40,12 +40,14 @@
       gap: 10px;
     }
 
-    input {
+    input,
+    select {
       flex: 1;
       padding: 14px;
       border-radius: 14px;
       border: 1px solid #cbd5e1;
       font-size: 16px;
+      background: white;
     }
 
     button {
@@ -69,6 +71,17 @@
       padding: 12px 14px;
       margin-top: 12px;
       color: #475569;
+    }
+
+    .selector-block {
+      margin-bottom: 16px;
+    }
+
+    .selector-label {
+      display: block;
+      font-size: 14px;
+      color: #64748b;
+      margin-bottom: 8px;
     }
 
     .category {
@@ -110,6 +123,7 @@
     .item-meta {
       font-size: 13px;
       color: #64748b;
+      line-height: 1.4;
     }
 
     .qty {
@@ -175,7 +189,7 @@
     .history-item-meta {
       font-size: 13px;
       color: #64748b;
-      line-height: 1.4;
+      line-height: 1.5;
     }
 
     .suggestions-wrap {
@@ -211,7 +225,8 @@
       }
 
       button,
-      input {
+      input,
+      select {
         width: 100%;
       }
 
@@ -231,6 +246,11 @@
       <h1>Mat</h1>
       <div class="sub">Familiens handleliste</div>
 
+      <div class="selector-block">
+        <label class="selector-label" for="userSelect">Hvem bruker appen nå?</label>
+        <select id="userSelect"></select>
+      </div>
+
       <div class="row">
         <input id="input" placeholder="Legg til matvarer..." />
         <button id="addBtn">+</button>
@@ -243,7 +263,7 @@
       <div class="suggestions-header">
         <div>
           <h2>Smarte forslag</h2>
-          <div class="sub" style="margin-bottom:0;">Basert på varer dere ofte har kjøpt.</div>
+          <div class="sub" style="margin-bottom:0;">Basert på varer familien ofte har kjøpt.</div>
         </div>
       </div>
       <div id="suggestionsCard"></div>
@@ -255,7 +275,7 @@
       <div class="history-header">
         <div>
           <h2>Handlehistorikk</h2>
-          <div class="sub" style="margin-bottom:0;">Kjøpte varer lagres her.</div>
+          <div class="sub" style="margin-bottom:0;">Kjøpte varer lagres med navn på den som handlet.</div>
         </div>
         <button id="clearHistoryBtn" class="secondary-btn">Tøm historikk</button>
       </div>
@@ -272,6 +292,14 @@
     const API_URL = "https://familieapp-backend.onrender.com/api/parse";
     const STORAGE_KEY_ITEMS = "familieapp_items";
     const STORAGE_KEY_HISTORY = "familieapp_history";
+    const STORAGE_KEY_ACTIVE_USER = "familieapp_active_user";
+
+    const USERS = [
+      "Mamma",
+      "Pappa",
+      "Barn 1",
+      "Barn 2"
+    ];
 
     const CATEGORY_ORDER = [
       "Frukt og grønt",
@@ -288,6 +316,7 @@
 
     let items = [];
     let history = [];
+    let activeUser = USERS[0];
 
     const input = document.getElementById("input");
     const addBtn = document.getElementById("addBtn");
@@ -298,6 +327,7 @@
     const activeCount = document.getElementById("activeCount");
     const historyCount = document.getElementById("historyCount");
     const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+    const userSelect = document.getElementById("userSelect");
 
     function setMessage(text) {
       message.textContent = text;
@@ -319,20 +349,35 @@
     function saveData() {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
       localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
+      localStorage.setItem(STORAGE_KEY_ACTIVE_USER, activeUser);
     }
 
     function loadData() {
       try {
         const savedItems = localStorage.getItem(STORAGE_KEY_ITEMS);
         const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
+        const savedActiveUser = localStorage.getItem(STORAGE_KEY_ACTIVE_USER);
 
         items = savedItems ? JSON.parse(savedItems) : [];
         history = savedHistory ? JSON.parse(savedHistory) : [];
+
+        if (savedActiveUser && USERS.includes(savedActiveUser)) {
+          activeUser = savedActiveUser;
+        } else {
+          activeUser = USERS[0];
+        }
       } catch (error) {
         console.error("Kunne ikke lese lagrede data", error);
         items = [];
         history = [];
+        activeUser = USERS[0];
       }
+    }
+
+    function renderUsers() {
+      userSelect.innerHTML = USERS.map(user => `
+        <option value="${user}" ${user === activeUser ? "selected" : ""}>${user}</option>
+      `).join("");
     }
 
     function getSuggestionCandidates() {
@@ -346,6 +391,7 @@
 
       history.forEach(item => {
         if (!item.normalizedName) return;
+
         if (!counts[item.normalizedName]) {
           counts[item.normalizedName] = {
             normalizedName: item.normalizedName,
@@ -386,7 +432,7 @@
       if (suggestions.length === 0) {
         suggestionsCard.innerHTML = `
           <div class="empty">
-            Kjøp noen varer først, så begynner appen å foreslå ting dere ofte handler.
+            Kjøp noen varer først, så begynner appen å foreslå ting familien ofte handler.
           </div>
         `;
         return;
@@ -401,7 +447,7 @@
           `).join("")}
         </div>
         <div class="suggestion-meta">
-          Forslagene bygger på hvor ofte en vare er kjøpt tidligere, og skjuler varer som allerede ligger i den aktive lista.
+          Forslagene bygger på familiens kjøpshistorikk og skjuler varer som allerede ligger i aktiv liste.
         </div>
       `;
     }
@@ -426,6 +472,7 @@
                 <div class="history-item-name">${item.name}</div>
                 <div class="history-item-meta">
                   Kategori: ${item.category || "Annet"}<br>
+                  Handlet av: ${item.purchasedBy || "Ukjent"}<br>
                   Kjøpt: ${formatDate(item.purchasedAt)}
                 </div>
               </div>
@@ -468,7 +515,7 @@
               <div class="item" onclick="markPurchased(${item.id})">
                 <div class="item-left">
                   <span class="item-name">${item.name}</span>
-                  <span class="item-meta">Trykk for å markere som kjøpt</span>
+                  <span class="item-meta">Trykk for å markere som kjøpt av ${activeUser}</span>
                 </div>
                 ${item.quantity > 1 ? `<span class="qty">${item.quantity}</span>` : ""}
               </div>
@@ -482,12 +529,13 @@
     }
 
     function render() {
+      renderUsers();
       renderSuggestions();
       renderActiveItems();
       renderHistory();
     }
 
-    function addItemDirect({ name, normalizedName, category, quantity }) {
+    function addItemDirect({ name, normalizedName, category, quantity, addedBy }) {
       const safeNormalized = normalizeName(normalizedName || name || "");
       if (!safeNormalized) return false;
 
@@ -509,7 +557,8 @@
           category: safeCategory,
           quantity: safeQuantity,
           status: "active",
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          addedBy: addedBy || activeUser
         });
       }
 
@@ -524,7 +573,7 @@
       }
 
       addBtn.disabled = true;
-      setMessage("Tolker teksten...");
+      setMessage(`Tolker teksten for ${activeUser}...`);
 
       try {
         const response = await fetch(API_URL, {
@@ -544,12 +593,13 @@
             name: item.name || "",
             normalizedName: item.name || "",
             category: item.category || "Annet",
-            quantity: item.quantity
+            quantity: item.quantity,
+            addedBy: activeUser
           });
         });
 
         saveData();
-        setMessage(`La til ${data.items.length} vare${data.items.length > 1 ? "r" : ""}.`);
+        setMessage(`${activeUser} la til ${data.items.length} vare${data.items.length > 1 ? "r" : ""}.`);
         input.value = "";
         render();
       } catch (error) {
@@ -571,11 +621,12 @@
       history.unshift({
         ...item,
         status: "purchased",
-        purchasedAt: new Date().toISOString()
+        purchasedAt: new Date().toISOString(),
+        purchasedBy: activeUser
       });
 
       saveData();
-      setMessage(`${item.name} er kjøpt.`);
+      setMessage(`${item.name} er kjøpt av ${activeUser}.`);
       render();
     }
 
@@ -587,11 +638,12 @@
         name: match.name,
         normalizedName: match.normalizedName,
         category: match.category,
-        quantity: 1
+        quantity: 1,
+        addedBy: activeUser
       });
 
       saveData();
-      setMessage(`${match.name} ble lagt til fra forslag.`);
+      setMessage(`${match.name} ble lagt til av ${activeUser} fra forslag.`);
       render();
     }
 
@@ -605,8 +657,19 @@
       render();
     }
 
+    function changeActiveUser() {
+      const selected = userSelect.value;
+      if (!USERS.includes(selected)) return;
+
+      activeUser = selected;
+      saveData();
+      setMessage(`${activeUser} er valgt som aktiv bruker.`);
+      render();
+    }
+
     addBtn.addEventListener("click", addItems);
     clearHistoryBtn.addEventListener("click", clearHistory);
+    userSelect.addEventListener("change", changeActiveUser);
 
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") addItems();
