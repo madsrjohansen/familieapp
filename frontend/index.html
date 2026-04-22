@@ -473,12 +473,6 @@
     }
 
     function getSuggestionCandidates() {
-      const activeNames = new Set(
-        items
-          .filter(item => item.status === "active")
-          .map(item => item.normalizedName)
-      );
-
       const counts = {};
 
       suggestionMemory.forEach(item => {
@@ -506,7 +500,6 @@
       });
 
       return Object.values(counts)
-        .filter(item => !activeNames.has(item.normalizedName))
         .sort((a, b) => {
           if (b.timesPurchased !== a.timesPurchased) {
             return b.timesPurchased - a.timesPurchased;
