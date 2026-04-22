@@ -48,6 +48,7 @@
       border: 1px solid #cbd5e1;
       font-size: 16px;
       background: white;
+      box-sizing: border-box;
     }
 
     button {
@@ -63,6 +64,21 @@
     button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
+    }
+
+    .secondary-btn {
+      background: #e2e8f0;
+      color: #1e293b;
+      font-size: 14px;
+      padding: 10px 14px;
+    }
+
+    .ghost-btn {
+      background: transparent;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+      font-size: 14px;
+      padding: 10px 14px;
     }
 
     .message {
@@ -82,6 +98,36 @@
       font-size: 14px;
       color: #64748b;
       margin-bottom: 8px;
+    }
+
+    .settings-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 14px;
+      margin-top: 14px;
+    }
+
+    .settings-box h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      color: #334155;
+    }
+
+    .member-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .member-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .member-row input {
+      flex: 1;
     }
 
     .category {
@@ -157,17 +203,11 @@
       margin-bottom: 12px;
     }
 
-    .secondary-btn {
-      background: #e2e8f0;
-      color: #1e293b;
-      font-size: 14px;
-      padding: 10px 14px;
-    }
-
     .history-list {
       display: flex;
       flex-direction: column;
       gap: 8px;
+      margin-top: 12px;
     }
 
     .history-item {
@@ -189,6 +229,12 @@
     .history-item-meta {
       font-size: 13px;
       color: #64748b;
+      line-height: 1.5;
+    }
+
+    .history-summary {
+      color: #64748b;
+      font-size: 14px;
       line-height: 1.5;
     }
 
@@ -220,7 +266,8 @@
     }
 
     @media (max-width: 640px) {
-      .row {
+      .row,
+      .member-row {
         flex-direction: column;
       }
 
@@ -251,7 +298,15 @@
         <select id="userSelect"></select>
       </div>
 
-      <div class="row">
+      <button id="toggleSettingsBtn" class="ghost-btn" type="button">Rediger familiemedlemmer</button>
+
+      <div class="settings-box" id="settingsBox" style="display:none;">
+        <h3>Familiemedlemmer</h3>
+        <div class="member-list" id="memberList"></div>
+        <button id="saveMembersBtn" class="secondary-btn" type="button">Lagre navn</button>
+      </div>
+
+      <div class="row" style="margin-top:16px;">
         <input id="input" placeholder="Legg til matvarer..." />
         <button id="addBtn">+</button>
       </div>
@@ -274,10 +329,13 @@
     <div class="card">
       <div class="history-header">
         <div>
-          <h2>Handlehistorikk</h2>
-          <div class="sub" style="margin-bottom:0;">Kjøpte varer lagres med navn på den som handlet.</div>
+          <h2>Kjøpshistorikk</h2>
+          <div class="sub" style="margin-bottom:0;">Ligger i eget område så handlelista holder seg ryddig.</div>
         </div>
-        <button id="clearHistoryBtn" class="secondary-btn">Tøm historikk</button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button id="toggleHistoryBtn" class="ghost-btn" type="button">Vis historikk</button>
+          <button id="clearHistoryBtn" class="secondary-btn" type="button">Tøm historikk</button>
+        </div>
       </div>
       <div id="historyCard"></div>
     </div>
@@ -293,13 +351,10 @@
     const STORAGE_KEY_ITEMS = "familieapp_items";
     const STORAGE_KEY_HISTORY = "familieapp_history";
     const STORAGE_KEY_ACTIVE_USER = "familieapp_active_user";
+    const STORAGE_KEY_USERS = "familieapp_users";
+    const STORAGE_KEY_HISTORY_OPEN = "familieapp_history_open";
 
-    const USERS = [
-      "Mamma",
-      "Pappa",
-      "Barn 1",
-      "Barn 2"
-    ];
+    const DEFAULT_USERS = ["Mamma", "Pappa", "Barn 1", "Barn 2"];
 
     const CATEGORY_ORDER = [
       "Frukt og grønt",
@@ -316,7 +371,9 @@
 
     let items = [];
     let history = [];
-    let activeUser = USERS[0];
+    let users = [...DEFAULT_USERS];
+    let activeUser = users[0];
+    let historyOpen = false;
 
     const input = document.getElementById("input");
     const addBtn = document.getElementById("addBtn");
@@ -328,6 +385,11 @@
     const historyCount = document.getElementById("historyCount");
     const clearHistoryBtn = document.getElementById("clearHistoryBtn");
     const userSelect = document.getElementById("userSelect");
+    const toggleSettingsBtn = document.getElementById("toggleSettingsBtn");
+    const settingsBox = document.getElementById("settingsBox");
+    const memberList = document.getElementById("memberList");
+    const saveMembersBtn = document.getElementById("saveMembersBtn");
+    const toggleHistoryBtn = document.getElementById("toggleHistoryBtn");
 
     function setMessage(text) {
       message.textContent = text;
@@ -350,6 +412,8 @@
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
       localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
       localStorage.setItem(STORAGE_KEY_ACTIVE_USER, activeUser);
+      localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
+      localStorage.setItem(STORAGE_KEY_HISTORY_OPEN, JSON.stringify(historyOpen));
     }
 
     function loadData() {
@@ -357,26 +421,49 @@
         const savedItems = localStorage.getItem(STORAGE_KEY_ITEMS);
         const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
         const savedActiveUser = localStorage.getItem(STORAGE_KEY_ACTIVE_USER);
+        const savedUsers = localStorage.getItem(STORAGE_KEY_USERS);
+        const savedHistoryOpen = localStorage.getItem(STORAGE_KEY_HISTORY_OPEN);
 
         items = savedItems ? JSON.parse(savedItems) : [];
         history = savedHistory ? JSON.parse(savedHistory) : [];
 
-        if (savedActiveUser && USERS.includes(savedActiveUser)) {
+        const parsedUsers = savedUsers ? JSON.parse(savedUsers) : DEFAULT_USERS;
+        users = Array.isArray(parsedUsers)
+          ? parsedUsers.map(name => String(name).trim()).filter(Boolean).slice(0, 6)
+          : [...DEFAULT_USERS];
+
+        if (users.length === 0) {
+          users = [...DEFAULT_USERS];
+        }
+
+        if (savedActiveUser && users.includes(savedActiveUser)) {
           activeUser = savedActiveUser;
         } else {
-          activeUser = USERS[0];
+          activeUser = users[0];
         }
+
+        historyOpen = savedHistoryOpen ? JSON.parse(savedHistoryOpen) === true : false;
       } catch (error) {
         console.error("Kunne ikke lese lagrede data", error);
         items = [];
         history = [];
-        activeUser = USERS[0];
+        users = [...DEFAULT_USERS];
+        activeUser = users[0];
+        historyOpen = false;
       }
     }
 
     function renderUsers() {
-      userSelect.innerHTML = USERS.map(user => `
+      userSelect.innerHTML = users.map(user => `
         <option value="${user}" ${user === activeUser ? "selected" : ""}>${user}</option>
+      `).join("");
+    }
+
+    function renderMemberInputs() {
+      memberList.innerHTML = users.map((user, index) => `
+        <div class="member-row">
+          <input type="text" data-index="${index}" value="${user}" placeholder="Navn" />
+        </div>
       `).join("");
     }
 
@@ -398,13 +485,11 @@
             name: item.name,
             category: item.category || "Annet",
             timesPurchased: 0,
-            totalQuantity: 0,
             lastPurchasedAt: item.purchasedAt || null
           };
         }
 
         counts[item.normalizedName].timesPurchased += 1;
-        counts[item.normalizedName].totalQuantity += Number(item.quantity) > 0 ? Number(item.quantity) : 1;
 
         if (
           item.purchasedAt &&
@@ -454,11 +539,21 @@
 
     function renderHistory() {
       historyCount.textContent = `Kjøpt totalt: ${history.length}`;
+      toggleHistoryBtn.textContent = historyOpen ? "Skjul historikk" : "Vis historikk";
 
       if (history.length === 0) {
         historyCard.innerHTML = `
           <div class="empty">
             Ingen kjøpte varer ennå.
+          </div>
+        `;
+        return;
+      }
+
+      if (!historyOpen) {
+        historyCard.innerHTML = `
+          <div class="history-summary">
+            Historikken er skjult for å holde appen ryddig. Du har ${history.length} registrerte kjøp.
           </div>
         `;
         return;
@@ -530,6 +625,7 @@
 
     function render() {
       renderUsers();
+      renderMemberInputs();
       renderSuggestions();
       renderActiveItems();
       renderHistory();
@@ -614,9 +710,7 @@
       const item = items.find(entry => entry.id === id);
       if (!item) return;
 
-      items = items.map(entry =>
-        entry.id === id ? { ...entry, status: "purchased" } : entry
-      );
+      items = items.filter(entry => entry.id !== id);
 
       history.unshift({
         ...item,
@@ -659,7 +753,7 @@
 
     function changeActiveUser() {
       const selected = userSelect.value;
-      if (!USERS.includes(selected)) return;
+      if (!users.includes(selected)) return;
 
       activeUser = selected;
       saveData();
@@ -667,9 +761,64 @@
       render();
     }
 
+    function toggleSettings() {
+      const isOpen = settingsBox.style.display === "block";
+      settingsBox.style.display = isOpen ? "none" : "block";
+      toggleSettingsBtn.textContent = isOpen ? "Rediger familiemedlemmer" : "Lukk redigering";
+    }
+
+    function saveMembers() {
+      const inputs = Array.from(memberList.querySelectorAll("input"));
+      const newUsers = inputs
+        .map(input => input.value.trim())
+        .filter(Boolean)
+        .slice(0, 6);
+
+      if (newUsers.length === 0) {
+        setMessage("Du må ha minst ett familiemedlem.");
+        return;
+      }
+
+      const previousUsers = [...users];
+      users = newUsers;
+
+      if (!users.includes(activeUser)) {
+        activeUser = users[0];
+      }
+
+      items = items.map(item => {
+        const safeAddedBy = previousUsers.includes(item.addedBy) ? item.addedBy : users[0];
+        return {
+          ...item,
+          addedBy: safeAddedBy
+        };
+      });
+
+      history = history.map(item => {
+        const safePurchasedBy = previousUsers.includes(item.purchasedBy) ? item.purchasedBy : users[0];
+        return {
+          ...item,
+          purchasedBy: safePurchasedBy
+        };
+      });
+
+      saveData();
+      setMessage("Familiemedlemmer er oppdatert.");
+      render();
+    }
+
+    function toggleHistory() {
+      historyOpen = !historyOpen;
+      saveData();
+      render();
+    }
+
     addBtn.addEventListener("click", addItems);
     clearHistoryBtn.addEventListener("click", clearHistory);
     userSelect.addEventListener("change", changeActiveUser);
+    toggleSettingsBtn.addEventListener("click", toggleSettings);
+    saveMembersBtn.addEventListener("click", saveMembers);
+    toggleHistoryBtn.addEventListener("click", toggleHistory);
 
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") addItems();
