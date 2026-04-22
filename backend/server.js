@@ -121,26 +121,35 @@ app.get("/api/bootstrap", async (_req, res) => {
   try {
     const familyMembers = await ensureDefaultFamilyMembers();
 
-    const [{ data: items, error: itemsError }, { data: history, error: historyError }] =
-      await Promise.all([
-        supabase
-          .from("shopping_items")
-          .select("*")
-          .eq("status", "active")
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("purchase_history")
-          .select("*")
-          .order("purchased_at", { ascending: false }),
-      ]);
+    const [
+      { data: items, error: itemsError },
+      { data: history, error: historyError },
+      { data: suggestionMemory, error: suggestionError },
+    ] = await Promise.all([
+      supabase
+        .from("shopping_items")
+        .select("*")
+        .eq("status", "active")
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("purchase_history")
+        .select("*")
+        .order("purchased_at", { ascending: false }),
+      supabase
+        .from("suggestion_memory")
+        .select("*")
+        .order("purchased_at", { ascending: false }),
+    ]);
 
     if (itemsError) throw itemsError;
     if (historyError) throw historyError;
+    if (suggestionError) throw suggestionError;
 
     return res.json({
       users: (familyMembers || []).map((member) => member.name),
       items: items || [],
       history: history || [],
+      suggestionMemory: suggestionMemory || [],
     });
   } catch (error) {
     console.error("Feil i /api/bootstrap", error);
@@ -297,6 +306,12 @@ app.post("/api/purchase", async (req, res) => {
       .single();
 
     if (historyError) throw historyError;
+
+    const { error: suggestionError } = await supabase
+      .from("suggestion_memory")
+      .insert(purchaseRow);
+
+    if (suggestionError) throw suggestionError;
 
     const { error: deleteError } = await supabase
       .from("shopping_items")
