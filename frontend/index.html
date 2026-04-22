@@ -334,6 +334,7 @@
     const API_URL = "https://familieapp-backend.onrender.com/api/parse";
     const STORAGE_KEY_ITEMS = "familieapp_items";
     const STORAGE_KEY_HISTORY = "familieapp_history";
+    const STORAGE_KEY_SUGGESTION_MEMORY = "familieapp_suggestion_memory";
     const STORAGE_KEY_ACTIVE_USER = "familieapp_active_user";
     const STORAGE_KEY_USERS = "familieapp_users";
     const STORAGE_KEY_HISTORY_OPEN = "familieapp_history_open";
@@ -355,6 +356,7 @@
 
     let items = [];
     let history = [];
+    let suggestionMemory = [];
     let users = [...DEFAULT_USERS];
     let activeUser = users[0];
     let historyOpen = false;
@@ -395,6 +397,7 @@
     function saveData() {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
       localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
+      localStorage.setItem(STORAGE_KEY_SUGGESTION_MEMORY, JSON.stringify(suggestionMemory));
       localStorage.setItem(STORAGE_KEY_ACTIVE_USER, activeUser);
       localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
       localStorage.setItem(STORAGE_KEY_HISTORY_OPEN, JSON.stringify(historyOpen));
@@ -404,12 +407,14 @@
       try {
         const savedItems = localStorage.getItem(STORAGE_KEY_ITEMS);
         const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
+        const savedSuggestionMemory = localStorage.getItem(STORAGE_KEY_SUGGESTION_MEMORY);
         const savedActiveUser = localStorage.getItem(STORAGE_KEY_ACTIVE_USER);
         const savedUsers = localStorage.getItem(STORAGE_KEY_USERS);
         const savedHistoryOpen = localStorage.getItem(STORAGE_KEY_HISTORY_OPEN);
 
         items = savedItems ? JSON.parse(savedItems) : [];
         history = savedHistory ? JSON.parse(savedHistory) : [];
+        suggestionMemory = savedSuggestionMemory ? JSON.parse(savedSuggestionMemory) : [];
 
         const parsedUsers = savedUsers ? JSON.parse(savedUsers) : DEFAULT_USERS;
         users = Array.isArray(parsedUsers)
@@ -431,6 +436,7 @@
         console.error("Kunne ikke lese lagrede data", error);
         items = [];
         history = [];
+        suggestionMemory = [];
         users = [...DEFAULT_USERS];
         activeUser = users[0];
         historyOpen = false;
@@ -451,6 +457,21 @@
       `).join("");
     }
 
+    function rememberPurchase(item) {
+      suggestionMemory.unshift({
+        normalizedName: item.normalizedName,
+        name: item.name,
+        category: item.category || "Annet",
+        quantity: Number(item.quantity) > 0 ? Number(item.quantity) : 1,
+        purchasedAt: new Date().toISOString(),
+        purchasedBy: activeUser
+      });
+
+      if (suggestionMemory.length > 500) {
+        suggestionMemory = suggestionMemory.slice(0, 500);
+      }
+    }
+
     function getSuggestionCandidates() {
       const activeNames = new Set(
         items
@@ -460,7 +481,7 @@
 
       const counts = {};
 
-      history.forEach(item => {
+      suggestionMemory.forEach(item => {
         if (!item.normalizedName) return;
 
         if (!counts[item.normalizedName]) {
@@ -689,12 +710,15 @@
 
       items = items.filter(entry => entry.id !== id);
 
-      history.unshift({
+      const purchasedItem = {
         ...item,
         status: "purchased",
         purchasedAt: new Date().toISOString(),
         purchasedBy: activeUser
-      });
+      };
+
+      history.unshift(purchasedItem);
+      rememberPurchase(purchasedItem);
 
       saveData();
       setMessage(`${item.name} er kjøpt av ${activeUser}.`);
@@ -702,7 +726,7 @@
     }
 
     function addSuggestion(normalizedName) {
-      const match = history.find(item => item.normalizedName === normalizedName);
+      const match = suggestionMemory.find(item => item.normalizedName === normalizedName);
       if (!match) return;
 
       addItemDirect({
@@ -724,7 +748,7 @@
 
       history = [];
       saveData();
-      setMessage("Historikken ble tømt.");
+      setMessage("Historikken ble tømt. Forslagene er fortsatt bevart.");
       render();
     }
 
