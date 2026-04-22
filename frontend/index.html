@@ -348,6 +348,7 @@
 
     let items = [];
     let history = [];
+    let suggestionMemory = [];
     let users = [];
     let activeUser = "";
     let historyOpen = false;
@@ -398,7 +399,7 @@
     function getSuggestionCandidates() {
       const counts = {};
 
-      history.forEach(item => {
+      suggestionMemory.forEach(item => {
         const normalized = normalizeName(item.normalized_name || item.name);
         if (!normalized) return;
 
@@ -564,6 +565,7 @@
 
       items = Array.isArray(data.items) ? data.items : [];
       history = Array.isArray(data.history) ? data.history : [];
+      suggestionMemory = Array.isArray(data.suggestionMemory) ? data.suggestionMemory : [];
     }
 
     async function addItemDirect({ name, category, quantity, addedBy }) {
@@ -673,6 +675,7 @@
 
         if (data.purchased) {
           history.unshift(data.purchased);
+          suggestionMemory.unshift(data.purchased);
         }
 
         setMessage(`${data?.purchased?.name || "Varen"} er kjøpt av ${activeUser}.`);
@@ -684,7 +687,7 @@
     }
 
     async function addSuggestion(normalizedName) {
-      const match = history.find(item => normalizeName(item.normalized_name || item.name) === normalizedName);
+      const match = suggestionMemory.find(item => normalizeName(item.normalized_name || item.name) === normalizedName);
       if (!match) return;
 
       try {
@@ -719,7 +722,7 @@
         }
 
         history = [];
-        setMessage("Historikken ble tømt.");
+        setMessage("Historikken ble tømt. Forslagene er fortsatt bevart.");
         render();
       } catch (error) {
         console.error(error);
