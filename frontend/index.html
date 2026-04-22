@@ -134,7 +134,8 @@
       font-size: 14px;
     }
 
-    .history-header {
+    .history-header,
+    .suggestions-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -177,6 +178,33 @@
       line-height: 1.4;
     }
 
+    .suggestions-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .suggestion-chip {
+      background: #eef2ff;
+      color: #1e293b;
+      border: 1px solid #c7d2fe;
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .suggestion-chip:hover {
+      background: #e0e7ff;
+    }
+
+    .suggestion-meta {
+      margin-top: 12px;
+      color: #64748b;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
     @media (max-width: 640px) {
       .row {
         flex-direction: column;
@@ -189,6 +217,7 @@
 
       .footer,
       .history-header,
+      .suggestions-header,
       .history-item {
         flex-direction: column;
         align-items: stretch;
@@ -208,6 +237,16 @@
       </div>
 
       <div class="message" id="message">Klar for handling.</div>
+    </div>
+
+    <div class="card">
+      <div class="suggestions-header">
+        <div>
+          <h2>Smarte forslag</h2>
+          <div class="sub" style="margin-bottom:0;">Basert på varer dere ofte har kjøpt.</div>
+        </div>
+      </div>
+      <div id="suggestionsCard"></div>
     </div>
 
     <div class="card" id="listCard"></div>
@@ -255,6 +294,7 @@
     const message = document.getElementById("message");
     const listCard = document.getElementById("listCard");
     const historyCard = document.getElementById("historyCard");
+    const suggestionsCard = document.getElementById("suggestionsCard");
     const activeCount = document.getElementById("activeCount");
     const historyCount = document.getElementById("historyCount");
     const clearHistoryBtn = document.getElementById("clearHistoryBtn");
@@ -293,6 +333,77 @@
         items = [];
         history = [];
       }
+    }
+
+    function getSuggestionCandidates() {
+      const activeNames = new Set(
+        items
+          .filter(item => item.status === "active")
+          .map(item => item.normalizedName)
+      );
+
+      const counts = {};
+
+      history.forEach(item => {
+        if (!item.normalizedName) return;
+        if (!counts[item.normalizedName]) {
+          counts[item.normalizedName] = {
+            normalizedName: item.normalizedName,
+            name: item.name,
+            category: item.category || "Annet",
+            timesPurchased: 0,
+            totalQuantity: 0,
+            lastPurchasedAt: item.purchasedAt || null
+          };
+        }
+
+        counts[item.normalizedName].timesPurchased += 1;
+        counts[item.normalizedName].totalQuantity += Number(item.quantity) > 0 ? Number(item.quantity) : 1;
+
+        if (
+          item.purchasedAt &&
+          (!counts[item.normalizedName].lastPurchasedAt ||
+            new Date(item.purchasedAt) > new Date(counts[item.normalizedName].lastPurchasedAt))
+        ) {
+          counts[item.normalizedName].lastPurchasedAt = item.purchasedAt;
+        }
+      });
+
+      return Object.values(counts)
+        .filter(item => !activeNames.has(item.normalizedName))
+        .sort((a, b) => {
+          if (b.timesPurchased !== a.timesPurchased) {
+            return b.timesPurchased - a.timesPurchased;
+          }
+          return new Date(b.lastPurchasedAt || 0) - new Date(a.lastPurchasedAt || 0);
+        })
+        .slice(0, 8);
+    }
+
+    function renderSuggestions() {
+      const suggestions = getSuggestionCandidates();
+
+      if (suggestions.length === 0) {
+        suggestionsCard.innerHTML = `
+          <div class="empty">
+            Kjøp noen varer først, så begynner appen å foreslå ting dere ofte handler.
+          </div>
+        `;
+        return;
+      }
+
+      suggestionsCard.innerHTML = `
+        <div class="suggestions-wrap">
+          ${suggestions.map(item => `
+            <button class="suggestion-chip" onclick="addSuggestion('${item.normalizedName.replace(/'/g, "\\'")}')">
+              ${item.name}
+            </button>
+          `).join("")}
+        </div>
+        <div class="suggestion-meta">
+          Forslagene bygger på hvor ofte en vare er kjøpt tidligere, og skjuler varer som allerede ligger i den aktive lista.
+        </div>
+      `;
     }
 
     function renderHistory() {
@@ -371,8 +482,38 @@
     }
 
     function render() {
+      renderSuggestions();
       renderActiveItems();
       renderHistory();
+    }
+
+    function addItemDirect({ name, normalizedName, category, quantity }) {
+      const safeNormalized = normalizeName(normalizedName || name || "");
+      if (!safeNormalized) return false;
+
+      const safeName = displayName(safeNormalized);
+      const safeCategory = category || "Annet";
+      const safeQuantity = Number(quantity) > 0 ? Number(quantity) : 1;
+
+      const existing = items.find(
+        entry => entry.normalizedName === safeNormalized && entry.status === "active"
+      );
+
+      if (existing) {
+        existing.quantity += safeQuantity;
+      } else {
+        items.push({
+          id: Date.now() + Math.random(),
+          name: safeName,
+          normalizedName: safeNormalized,
+          category: safeCategory,
+          quantity: safeQuantity,
+          status: "active",
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      return true;
     }
 
     async function addItems() {
@@ -399,29 +540,12 @@
         }
 
         data.items.forEach((item) => {
-          const normalized = normalizeName(item.name || "");
-          if (!normalized) return;
-
-          const quantity = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
-          const category = item.category || "Annet";
-
-          const existing = items.find(
-            entry => entry.normalizedName === normalized && entry.status === "active"
-          );
-
-          if (existing) {
-            existing.quantity += quantity;
-          } else {
-            items.push({
-              id: Date.now() + Math.random(),
-              name: displayName(normalized),
-              normalizedName: normalized,
-              category,
-              quantity,
-              status: "active",
-              createdAt: new Date().toISOString()
-            });
-          }
+          addItemDirect({
+            name: item.name || "",
+            normalizedName: item.name || "",
+            category: item.category || "Annet",
+            quantity: item.quantity
+          });
         });
 
         saveData();
@@ -455,6 +579,22 @@
       render();
     }
 
+    function addSuggestion(normalizedName) {
+      const match = history.find(item => item.normalizedName === normalizedName);
+      if (!match) return;
+
+      addItemDirect({
+        name: match.name,
+        normalizedName: match.normalizedName,
+        category: match.category,
+        quantity: 1
+      });
+
+      saveData();
+      setMessage(`${match.name} ble lagt til fra forslag.`);
+      render();
+    }
+
     function clearHistory() {
       const confirmed = window.confirm("Er du sikker på at du vil tømme historikken?");
       if (!confirmed) return;
@@ -474,6 +614,9 @@
 
     loadData();
     render();
+
+    window.markPurchased = markPurchased;
+    window.addSuggestion = addSuggestion;
   </script>
 </body>
 </html>
